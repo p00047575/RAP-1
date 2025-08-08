@@ -3,7 +3,7 @@
  <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
   <asx:values>
    <DEVC>
-    <CTEXT>Kapitel 10: Managed Scenario</CTEXT>
+    <CTEXT>Kapitel 7: RAP Erweiterbarkeit F4839 Manuelle Reservierungen</CTEXT>
     <PACKKIND>5</PACKKIND>
    </DEVC>
   </asx:values>

@@ -1,0 +1,430 @@
+CLASS lhc_PurchaseOrder DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PUBLIC SECTION.
+    CLASS-METHODS class_constructor.
+    CLASS-METHODS initialize.
+    CLASS-DATA po_mapped TYPE RESPONSE FOR MAPPED EARLY I_PurchaseOrderTP_2 READ-ONLY.
+  PRIVATE SECTION.
+    TYPES: BEGIN OF ts_po_org_data,
+             comp_code  TYPE ZI_RAP_FastPurchaseOrder_M-CompanyCode,
+             purch_org  TYPE ZI_RAP_FastPurchaseOrder_M-PurchasingOrganization,
+             pur_group  TYPE ZI_RAP_FastPurchaseOrder_M-PurchasingGroup,
+             plant      TYPE ZI_RAP_FastPurchaseOrder_M-Plant,
+             order_type TYPE ZI_RAP_FastPurchaseOrder_M-PurchaseOrderType,
+           END OF ts_po_org_data.
+
+    "! Materialdaten zur Bestell-Schnellerfassung
+    CLASS-DATA gt_material_cust TYPE TABLE OF ZI_RAP_PO_Product.
+    CLASS-DATA po_create_failed TYPE RESPONSE FOR FAILED EARLY I_PurchaseOrderTP_2.
+    CLASS-DATA po_delete_failed TYPE RESPONSE FOR FAILED I_PurchaseOrderTP_2.
+
+    METHODS read_org_data
+      RETURNING VALUE(org_data) TYPE ts_po_org_data.
+
+    METHODS read_baseunit_by_material
+      IMPORTING VALUE(material)           TYPE matnr " I_Material-Material
+      RETURNING VALUE(material_base_unit) TYPE meins. " I_Material-MaterialBaseUnit.
+
+    METHODS read_cust_by_material
+      IMPORTING VALUE(material)      TYPE ZI_RAP_FastPurchaseOrder_M-Material
+      RETURNING VALUE(material_cust) TYPE ZI_RAP_PO_Product.
+
+    METHODS read_supplier_by_material
+      IMPORTING VALUE(material) TYPE ZI_RAP_FastPurchaseOrder_M-Material
+      RETURNING VALUE(supplier) TYPE ZI_RAP_FastPurchaseOrder_M-Supplier.
+
+    METHODS get_instance_authorizations FOR INSTANCE AUTHORIZATION
+      IMPORTING keys REQUEST requested_authorizations FOR PurchaseOrder RESULT result.
+
+    METHODS initmaterialrelateddata FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR purchaseorder~initmaterialrelateddata.
+    METHODS initorgdata FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR purchaseorder~initorgdata.
+
+    METHODS createpurchaseorder FOR DETERMINE ON SAVE
+      IMPORTING keys FOR purchaseorder~createpurchaseorder.
+    METHODS deletepurchaseorder FOR DETERMINE ON SAVE
+      IMPORTING keys FOR purchaseorder~deletepurchaseorder.
+
+    METHODS validatematerial FOR VALIDATE ON SAVE
+      IMPORTING keys FOR purchaseorder~validatematerial.
+    METHODS validatemandatoryfields FOR VALIDATE ON SAVE
+      IMPORTING keys FOR purchaseorder~validatemandatoryfields.
+    METHODS lock FOR LOCK
+      IMPORTING keys FOR LOCK purchaseorder.
+    METHODS validateforcreate FOR VALIDATE ON SAVE
+      IMPORTING keys FOR purchaseorder~validateforcreate.
+    METHODS validatefordelete FOR VALIDATE ON SAVE
+      IMPORTING keys FOR purchaseorder~validatefordelete.
+    METHODS precheck_create FOR PRECHECK
+      IMPORTING entities FOR CREATE purchaseorder.
+
+ENDCLASS.
+
+
+CLASS lhc_PurchaseOrder IMPLEMENTATION.
+  METHOD class_constructor.
+    SELECT * FROM ZI_RAP_PO_Product
+      INTO TABLE @gt_material_cust.
+  ENDMETHOD.
+
+  METHOD initialize.
+    CLEAR po_mapped.
+    CLEAR po_create_failed.
+    CLEAR po_delete_failed.
+  ENDMETHOD.
+
+  METHOD get_instance_authorizations.
+    READ ENTITY IN LOCAL MODE ZI_RAP_FastPurchaseOrder_M
+         ALL FIELDS
+         WITH CORRESPONDING #( keys )
+         RESULT DATA(pos_for_auth_check).
+
+    LOOP AT pos_for_auth_check INTO DATA(po_for_auth_check).
+      " 02 - Ändern => Ist Löschen erlaubt
+      AUTHORITY-CHECK OBJECT 'M_BEST_EKO'
+        ID 'EKORG' FIELD po_for_auth_check-PurchasingOrganization
+        ID 'ACTVT' FIELD '02'.
+      IF sy-subrc <> 0.
+        APPEND VALUE #( PurchaseOrderUuid = po_for_auth_check-PurchaseOrderUuid
+                        %delete           = if_abap_behv=>auth-unauthorized ) TO result.
+        CONTINUE.
+      ENDIF.
+
+      AUTHORITY-CHECK OBJECT 'M_BEST_EKG'
+        ID 'EKGRP' FIELD po_for_auth_check-PurchasingGroup
+        ID 'ACTVT' FIELD '02'.
+      IF sy-subrc <> 0.
+        APPEND VALUE #( PurchaseOrderUuid = po_for_auth_check-PurchaseOrderUuid
+                        %delete           = if_abap_behv=>auth-unauthorized ) TO result.
+        CONTINUE.
+      ENDIF.
+
+      AUTHORITY-CHECK OBJECT 'M_BEST_BSA'
+        ID 'BSART' FIELD po_for_auth_check-PurchaseOrderType
+        ID 'ACTVT' FIELD '02'.
+      IF sy-subrc <> 0.
+        APPEND VALUE #( PurchaseOrderUuid = po_for_auth_check-PurchaseOrderUuid
+                        %delete           = if_abap_behv=>auth-unauthorized ) TO result.
+        CONTINUE.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD initMaterialRelatedData.
+    READ ENTITY IN LOCAL MODE ZI_RAP_FastPurchaseOrder_M
+         FIELDS ( Material )
+         WITH CORRESPONDING #( keys )
+         RESULT DATA(pos_with_material).
+    MODIFY ENTITIES OF ZI_RAP_FastPurchaseOrder_M IN LOCAL MODE
+           ENTITY PurchaseOrder
+           UPDATE
+           FIELDS ( Supplier PurchaseOrderQuantityUnit )
+           WITH VALUE #( FOR po IN pos_with_material
+                         ( %tky                      = po-%tky
+                           Supplier                  = read_supplier_by_material( po-material )
+                           PurchaseOrderQuantityUnit = read_baseunit_by_material( po-material ) ) ).
+  ENDMETHOD.
+
+  METHOD read_org_data.
+    org_data = VALUE #( comp_code  = '1010'
+                        purch_org  = '1010'
+                        plant      = '1010'
+                        pur_group  = '001'
+                        order_type = 'NB' ).
+  ENDMETHOD.
+
+  METHOD initOrgData.
+    DATA(org_data) = read_org_data( ).
+    MODIFY ENTITIES OF ZI_RAP_FastPurchaseOrder_M IN LOCAL MODE
+      ENTITY PurchaseOrder
+      UPDATE
+      FIELDS ( PurchaseOrderType CompanyCode PurchasingOrganization PurchasingGroup Plant )
+      WITH VALUE #( FOR k IN keys
+                    ( %tky                   = k-%tky
+                      PurchaseOrderType      = org_data-order_type
+                      CompanyCode            = org_data-comp_code
+                      PurchasingOrganization = org_data-purch_org
+                      PurchasingGroup        = org_data-pur_group
+                      Plant                  = org_data-plant ) ).
+  ENDMETHOD.
+
+  METHOD read_baseunit_by_material.
+    SELECT SINGLE FROM I_Product
+    FIELDS BaseUnit
+      WHERE Product = @material
+      INTO  @material_base_unit.
+  ENDMETHOD.
+
+  METHOD read_cust_by_material.
+    material_cust = VALUE #( gt_material_cust[ product = material ] OPTIONAL ).
+  ENDMETHOD.
+
+  METHOD read_supplier_by_material.
+    supplier = read_cust_by_material( material )-supplier.
+  ENDMETHOD.
+
+  METHOD createPurchaseOrder.
+    READ ENTITIES OF ZI_RAP_FastPurchaseOrder_M IN LOCAL MODE
+         ENTITY PurchaseOrder
+         ALL FIELDS WITH CORRESPONDING #( keys )
+         RESULT DATA(pos_to_create).
+
+    MODIFY ENTITIES OF I_PurchaseOrderTP_2
+           ENTITY PurchaseOrder
+           CREATE
+           FIELDS ( PurchaseOrderType CompanyCode PurchasingOrganization PurchasingGroup Supplier )
+           WITH VALUE #( FOR po IN pos_to_create
+                         ( %cid                   = po-PurchaseOrderUuid
+                           PurchaseOrderType      = po-PurchaseOrderType
+                           CompanyCode            = po-CompanyCode
+                           PurchasingOrganization = po-PurchasingOrganization
+                           PurchasingGroup        = po-PurchasingGroup
+                           Supplier               = po-Supplier ) )
+           CREATE BY \_PurchaseOrderItem
+           FIELDS ( PurchaseOrderItem Plant Material NetPriceAmount OrderQuantity PurchaseOrderQuantityUnit )
+           WITH VALUE #( FOR po IN pos_to_create
+                         ( %cid_ref               = po-PurchaseOrderUuid
+                           %target                = VALUE #( ( %cid                      = |{ po-PurchaseOrderUuid }_10|
+                                                               PurchaseOrderItem         = '10'
+                                                               Plant                     = po-Plant
+                                                               Material                  = po-Material
+                                                               NetPriceAmount            = 1
+                                                               OrderQuantity             = po-OrderQuantity
+                                                               PurchaseOrderQuantityUnit = po-PurchaseOrderQuantityUnit ) ) ) )
+           MAPPED po_mapped
+           FAILED po_create_failed.
+  ENDMETHOD.
+
+  METHOD deletePurchaseOrder.
+    SELECT FROM ZI_RAP_FastPurchaseOrder_M WITH PRIVILEGED ACCESS AS fast_po
+           INNER JOIN @keys AS fast_po_key ON fast_po~PurchaseOrderUuid = fast_po_key~PurchaseOrderUuid
+           FIELDS PurchaseOrder
+           INTO TABLE @DATA(pos_to_delete).
+    MODIFY ENTITIES OF I_PurchaseOrderTP_2
+           ENTITY PurchaseOrder
+           DELETE FROM CORRESPONDING #( pos_to_delete )
+           FAILED po_delete_failed.
+  ENDMETHOD.
+
+  METHOD validateMandatoryFields.
+    READ ENTITIES OF ZI_RAP_FastPurchaseOrder_M IN LOCAL MODE
+         ENTITY PurchaseOrder
+         ALL FIELDS WITH CORRESPONDING #( keys )
+         RESULT DATA(pos_to_create).
+
+    LOOP AT pos_to_create INTO DATA(po_to_create).
+      IF po_to_create-OrderQuantity IS INITIAL.
+        failed-purchaseorder = VALUE #( BASE failed-purchaseorder
+                                        ( %tky    = po_to_create-%tky
+                                          %create = if_abap_behv=>mk-on ) ).
+        reported-purchaseorder = VALUE #( BASE reported-purchaseorder
+                                          ( %tky                   = po_to_create-%tky
+                                            %element-orderquantity = if_abap_behv=>mk-on
+                                            %msg                   = me->new_message( severity = if_abap_behv_message=>severity-error
+                                                                                      id       = 'ZRAP_PO'
+                                                                                      number   = '003' ) ) ).
+      ENDIF.
+      IF po_to_create-Material IS INITIAL.
+        failed-purchaseorder = VALUE #( BASE failed-purchaseorder
+                                        ( %tky    = po_to_create-%tky
+                                          %create = if_abap_behv=>mk-on ) ).
+        reported-purchaseorder = VALUE #( BASE reported-purchaseorder
+                                          ( %tky              = po_to_create-%tky
+                                            %element-material = if_abap_behv=>mk-on
+                                            %msg              = me->new_message( severity = if_abap_behv_message=>severity-error
+                                                                                 id       = 'ZRAP_PO'
+                                                                                 number   = '004' ) ) ).
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD validateMaterial.
+    READ ENTITIES OF ZI_RAP_FastPurchaseOrder_M IN LOCAL MODE
+         ENTITY PurchaseOrder
+         ALL FIELDS WITH CORRESPONDING #( keys )
+         RESULT DATA(pos).
+
+    LOOP AT pos INTO DATA(po) WHERE NOT Material IS INITIAL.
+      DATA(material_cust) = read_cust_by_material( po-Material ).
+      IF NOT material_cust IS INITIAL.
+        IF material_cust-IsActive NE abap_true.
+          failed-purchaseorder = VALUE #( BASE failed-purchaseorder
+                                          ( %tky    = po-%tky
+                                            %create = if_abap_behv=>mk-on ) ).
+          reported-purchaseorder = VALUE #( BASE reported-purchaseorder
+                                            ( %tky              = po-%tky
+                                              %element-material = if_abap_behv=>mk-on
+                                              %msg              = me->new_message( severity = if_abap_behv_message=>severity-error
+                                                                                   id       = 'ZRAP_PO'
+                                                                                   number   = '002'
+                                                                                   v1       = |{ po-Material ALPHA = OUT }| ) ) ).
+        ENDIF.
+      ELSE.
+        failed-purchaseorder = VALUE #( BASE failed-purchaseorder
+                                        ( %tky    = po-%tky
+                                          %create = if_abap_behv=>mk-on ) ).
+        reported-purchaseorder = VALUE #( BASE reported-purchaseorder
+                                          ( %tky              = po-%tky
+                                            %element-material = if_abap_behv=>mk-on
+                                            %msg              = me->new_message( severity = if_abap_behv_message=>severity-error
+                                                                                 id       = 'ZRAP_PO'
+                                                                                 number   = '001'
+                                                                                 v1       = |{ po-Material ALPHA = OUT }| ) ) ).
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD lock.
+    READ ENTITIES OF ZI_RAP_FastPurchaseOrder_M IN LOCAL MODE
+         ENTITY PurchaseOrder
+         FIELDS ( PurchaseOrder ) WITH CORRESPONDING #( keys )
+         RESULT DATA(pos).
+
+    SET LOCKS OF I_PurchaseOrderTP_2
+        ENTITY PurchaseOrder
+        FROM VALUE #( FOR po IN pos
+                      ( PurchaseOrder = po-PurchaseOrder ) )
+        FAILED DATA(lock_failed)
+        REPORTED DATA(lock_reported).
+
+    failed-PurchaseOrder = VALUE #( FOR f IN lock_failed-PurchaseOrder
+                                    LET po = pos[ PurchaseOrder = f-PurchaseOrder ] IN
+                                    ( VALUE #( BASE CORRESPONDING #( f )
+                                    %tky = po-%tky ) ) ).
+    reported-PurchaseOrder = VALUE #( FOR r IN lock_reported-PurchaseOrder
+                                      LET po = pos[ PurchaseOrder = r-PurchaseOrder ] IN
+                                      ( VALUE #( BASE CORRESPONDING #( r )
+                                      %tky = po-%tky ) ) ).
+  ENDMETHOD.
+
+  METHOD validateForCreate.
+    LOOP AT keys INTO DATA(k).
+      IF line_exists( po_create_failed-purchaseorder[ KEY cid %cid = k-PurchaseOrderUuid ] )
+      OR line_exists( po_create_failed-purchaseorderitem[ KEY cid %cid = |{ k-PurchaseOrderUuid }_10| ] ).
+        APPEND VALUE #( %tky        = k-%tky
+                        %fail-cause = if_abap_behv=>cause-unspecific
+                        %create     = if_abap_behv=>mk-on ) TO failed-purchaseorder.
+        APPEND VALUE #( %tky    = k-%tky
+                        %msg    = new_message( severity = if_abap_behv_message=>severity-error
+                                               id       = 'ZRAP_PO'
+                                               number   = '006' )
+                        %create = if_abap_behv=>mk-on ) TO reported-purchaseorder.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD validateForDelete.
+    LOOP AT keys INTO DATA(k).
+      IF line_exists( po_delete_failed-purchaseorder[ KEY cid %cid = k-PurchaseOrderUuid ] )
+      OR line_exists( po_delete_failed-purchaseorderitem[ KEY cid %cid = |{ k-PurchaseOrderUuid }_10| ] ).
+        APPEND VALUE #( %tky        = k-%tky
+                        %fail-cause = if_abap_behv=>cause-unspecific
+                        %delete     = if_abap_behv=>mk-on ) TO failed-purchaseorder.
+        APPEND VALUE #( %tky    = k-%tky
+                        %msg    = new_message( severity = if_abap_behv_message=>severity-error
+                                               id       = 'ZRAP_PO'
+                                               number   = '007' )
+                        %delete = if_abap_behv=>mk-on ) TO reported-purchaseorder.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD precheck_create.
+    DATA(org_data) = read_org_data( ).
+    LOOP AT entities INTO DATA(po).
+      AUTHORITY-CHECK OBJECT 'M_BEST_EKO'
+        ID 'EKORG' FIELD org_data-purch_org
+        ID 'ACTVT' FIELD '01'.
+      IF sy-subrc <> 0.
+        failed-purchaseorder = VALUE #( BASE failed-purchaseorder
+                                        ( %cid    = po-%cid
+                                          %create = if_abap_behv=>auth-unauthorized ) ).
+        reported-purchaseorder = VALUE #( BASE reported-purchaseorder
+                                          ( %cid = po-%cid
+                                            %msg = me->new_message( severity = if_abap_behv_message=>severity-error
+                                                                    id       = 'ZRAP_PO'
+                                                                    number   = '005' ) ) ).
+        CONTINUE.
+      ENDIF.
+
+      AUTHORITY-CHECK OBJECT 'M_BEST_EKG'
+        ID 'EKGRP' FIELD org_data-pur_group
+        ID 'ACTVT' FIELD '01'.
+      IF sy-subrc <> 0.
+        failed-purchaseorder = VALUE #( BASE failed-purchaseorder
+                                        ( %cid    = po-%cid
+                                          %create = if_abap_behv=>auth-unauthorized ) ).
+        reported-purchaseorder = VALUE #( BASE reported-purchaseorder
+                                          ( %cid = po-%cid
+                                            %msg = me->new_message( severity = if_abap_behv_message=>severity-error
+                                                                    id       = 'ZRAP_PO'
+                                                                    number   = '005' ) ) ).
+        CONTINUE.
+      ENDIF.
+
+      AUTHORITY-CHECK OBJECT 'M_BEST_BSA'
+        ID 'BSART' FIELD org_data-order_type
+        ID 'ACTVT' FIELD '02'.
+      IF sy-subrc <> 0.
+        failed-purchaseorder = VALUE #( BASE failed-purchaseorder
+                                        ( %cid    = po-%cid
+                                          %create = if_abap_behv=>auth-unauthorized ) ).
+        reported-purchaseorder = VALUE #( BASE reported-purchaseorder
+                                          ( %cid = po-%cid
+                                            %msg = me->new_message( severity = if_abap_behv_message=>severity-error
+                                                                    id       = 'ZRAP_PO'
+                                                                    number   = '005' ) ) ).
+        CONTINUE.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS lsc_ZI_RAP_FASTPURCHASEORDER_M DEFINITION INHERITING FROM cl_abap_behavior_saver.
+  PROTECTED SECTION.
+    METHODS save_modified    REDEFINITION.
+
+    METHODS cleanup_finalize REDEFINITION.
+
+    METHODS cleanup REDEFINITION.
+
+ENDCLASS.
+
+
+CLASS lsc_ZI_RAP_FASTPURCHASEORDER_M IMPLEMENTATION.
+  METHOD save_modified.
+    DATA fast_pos_to_insert LIKE create-purchaseorder.
+    LOOP AT create-purchaseorder INTO DATA(fast_po).
+      DATA(po_mapped) = lhc_PurchaseOrder=>po_mapped-purchaseorder[ %cid = fast_po-PurchaseOrderUuid ].
+      CONVERT KEY OF I_PurchaseOrderTP_2 FROM po_mapped-%pid TO DATA(po_key).
+      fast_po-PurchaseOrder = po_key-PurchaseOrder.
+
+      DATA(item_mapped) = lhc_PurchaseOrder=>po_mapped-purchaseorderitem[ %cid = |{ fast_po-PurchaseOrderUuid }_10| ].
+      fast_po-PurchaseOrderItem = item_mapped-PurchaseOrderItem.
+      APPEND fast_po TO fast_pos_to_insert.
+    ENDLOOP.
+    INSERT zrap_a_fast_po FROM TABLE @fast_pos_to_insert MAPPING FROM ENTITY.
+    IF sy-subrc <> 0.
+      RAISE SHORTDUMP NEW zcx_rap_purchaseorder( ).
+    ENDIF.
+
+    DATA pos_to_delete TYPE TABLE FOR DELETE ZI_RAP_FastPurchaseOrder_M.
+    pos_to_delete = CORRESPONDING #( delete-purchaseorder ).
+    DELETE zrap_a_fast_po FROM TABLE @pos_to_delete MAPPING FROM ENTITY.
+    IF sy-subrc <> 0.
+      RAISE SHORTDUMP NEW zcx_rap_purchaseorder( ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD cleanup_finalize.
+    lhc_PurchaseOrder=>initialize( ).
+  ENDMETHOD.
+
+  METHOD cleanup.
+    lhc_PurchaseOrder=>initialize( ).
+  ENDMETHOD.
+ENDCLASS.

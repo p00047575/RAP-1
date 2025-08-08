@@ -1,0 +1,6 @@
+extension using interface i_salesordertp;
+
+extend behavior for SalesOrder
+{
+    managed event zz_changed on Changed parameter zz_x_SalesOrder;
+}

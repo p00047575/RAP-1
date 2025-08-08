@@ -1,0 +1,5 @@
+extension using interface i_reservationdocumenttp;
+extend behavior for ReservationDocument
+{
+    managed event zz_changed on Changed parameter ZI_RESERVATIONDOCUMENTHEADER;
+}

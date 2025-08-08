@@ -1,0 +1,17 @@
+@EndUserText.label : 'Schnellerfasste Bestellung'
+@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE
+@AbapCatalog.tableCategory : #TRANSPARENT
+@AbapCatalog.deliveryClass : #A
+@AbapCatalog.dataMaintenance : #NOT_ALLOWED
+define table zrap_a_fast_po {
+
+  key client              : abap.clnt not null;
+  key purchase_order_uuid : sysuuid_x16 not null;
+  purchase_order          : ebeln;
+  purchase_order_item     : ebelp;
+  created_by              : abp_creation_user;
+  created_at              : abp_creation_tstmpl;
+  last_changed_by         : abp_lastchange_user;
+  last_changed_at         : abp_lastchange_tstmpl;
+
+}

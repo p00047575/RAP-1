@@ -1,0 +1,50 @@
+*"* use this source file for the definition and implementation of
+*"* local helper classes, interface definitions and type
+*"* declarations
+CLASS lcl_local_event_consumption DEFINITION INHERITING FROM cl_abap_behavior_event_handler.
+  PRIVATE SECTION.
+    METHODS Reservation_Changed FOR ENTITY EVENT changed FOR ReservationDocument~ItemChanged.
+    METHODS Reservation_ZZChanged FOR ENTITY EVENT changed_Reservation FOR ReservationDocument~zz_changed.
+ENDCLASS.
+
+CLASS lcl_local_event_consumption IMPLEMENTATION.
+
+  METHOD reservation_zzchanged.
+    LOOP AT changed_reservation INTO DATA(ls_Changed_reservation).
+
+      data(lv_longtext) = |Text updated by Event - Extension by User: | && ls_changed_reservation-%param-LastChangedByUser.
+
+      MODIFY ENTITIES OF i_reservationdocumenttp IN LOCAL MODE
+             ENTITY ReservationDocument
+             UPDATE
+             FIELDS ( ReservationDate )
+             WITH VALUE #( (
+                             %key-Reservation   = ls_changed_reservation-Reservation
+                             ReservationDate          = '20240605'
+                             ) )
+      FAILED   DATA(ls_failed)
+      REPORTED DATA(ls_reported).
+
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD reservation_changed.
+    LOOP AT changed INTO DATA(ls_Changed_reservation).
+
+*      data(lv_longtext) = |Text updated by Event - Extension by User: | && ls_changed_reservation-%param-LastChangedByUser.
+
+      MODIFY ENTITIES OF i_reservationdocumenttp IN LOCAL MODE
+             ENTITY ReservationDocumentItem
+             UPDATE
+             FIELDS ( ReservationItemText )
+             WITH VALUE #( (
+                             %key-Reservation   = ls_changed_reservation-Reservation
+                             ReservationItemText          = '20240605'
+                             ) )
+      FAILED   DATA(ls_failed)
+      REPORTED DATA(ls_reported).
+
+    ENDLOOP.
+  ENDMETHOD.
+
+ENDCLASS.

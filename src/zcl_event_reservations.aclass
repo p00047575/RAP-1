@@ -1,0 +1,15 @@
+CLASS zcl_event_reservations DEFINITION
+                        PUBLIC
+                        ABSTRACT
+                        FINAL
+                        FOR EVENTS OF i_reservationdocumenttp.
+
+  PUBLIC SECTION.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCL_EVENT_RESERVATIONS IMPLEMENTATION.
+ENDCLASS.

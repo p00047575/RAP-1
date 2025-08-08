@@ -1,0 +1,62 @@
+CLASS zdemo_fast_po DEFINITION PUBLIC INHERITING FROM cl_demo_classrun FINAL CREATE PUBLIC.
+
+  PUBLIC SECTION.
+    METHODS main REDEFINITION.
+
+  PROTECTED SECTION.
+
+  PRIVATE SECTION.
+    METHODS insert_or_update_products.
+    METHODS create_fast_purchaseorder.
+    METHODS delete_fast_purchaseorder
+      IMPORTING fast_po TYPE ZI_RAP_FastPurchaseOrder_M-PurchaseOrderUuid.
+ENDCLASS.
+
+
+
+CLASS ZDEMO_FAST_PO IMPLEMENTATION.
+
+
+  METHOD create_fast_purchaseorder.
+    MODIFY ENTITIES OF ZI_RAP_FastPurchaseOrder_M
+           ENTITY PurchaseOrder
+           CREATE
+           FIELDS ( Material OrderQuantity ) WITH VALUE #( Material = 'TODO'
+                                                           ( %cid = '1' OrderQuantity = 1 )
+                                                           ( %cid = '2' OrderQuantity = 2 ) )
+           MAPPED DATA(mapped).
+    out->write_data( mapped ).
+    COMMIT ENTITIES
+           RESPONSE OF ZI_RAP_FastPurchaseOrder_M FAILED DATA(fast_po_failed) REPORTED DATA(fast_po_reported).
+    out->write_data( fast_po_failed ).
+    out->write_data( fast_po_reported ).
+  ENDMETHOD.
+
+
+  METHOD delete_fast_purchaseorder.
+    MODIFY ENTITIES OF ZI_RAP_FastPurchaseOrder_M
+           ENTITY PurchaseOrder
+           DELETE FROM VALUE #( ( PurchaseOrderUuid = fast_po ) ).
+    COMMIT ENTITIES
+           RESPONSE OF ZI_RAP_FastPurchaseOrder_M FAILED DATA(fast_po_failed) REPORTED DATA(fast_po_reported).
+    out->write_data( fast_po_failed ).
+    out->write_data( fast_po_reported ).
+  ENDMETHOD.
+
+
+  METHOD insert_or_update_products.
+    DATA products_to_insert TYPE TABLE OF zrap_a_po_prod.
+    products_to_insert = VALUE #(
+        ( product = 'PK0501' supplier = '0010305001' is_active = abap_true ) ).
+*        ( product = 'RAP_101' supplier = '969' is_active = abap_true ) ).
+    MODIFY zrap_a_po_prod FROM TABLE @products_to_insert.
+  ENDMETHOD.
+
+
+  METHOD main.
+    insert_or_update_products( ).
+*    create_fast_purchaseorder( ).
+*    delete_fast_purchaseorder( '123' ).
+    out->write_text( |Finished.| ).
+  ENDMETHOD.
+ENDCLASS.

@@ -1,0 +1,13 @@
+extension using interface i_reservationdocumenttp
+implementation in class zbp_z_x_rap_r_rdhtp_f4839 unique;
+
+extend behavior for ReservationDocument {
+  extend draft determine action Prepare {
+    validation ReservationDocumentItem~zzvalidateProduct;
+  }
+}
+
+extend behavior for ReservationDocumentItem
+{
+  validation zzvalidateProduct on save { field Reservation; create; update; }
+}

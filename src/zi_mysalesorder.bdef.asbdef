@@ -1,0 +1,43 @@
+unmanaged implementation in class zbp_i_mysalesorder unique;
+//with draft;  //ins
+strict(2);
+define behavior for ZI_MySalesOrder alias MySalesOrder
+//implementation in class zbp_i_mysalesorder unique
+//late numbering
+//lock master    //del
+
+//draft table zdvbak
+
+//early numbering  //ins
+
+//authorization master (instance)   //ins???
+authorization master (global)   //ins???
+
+//lock master total etag LocalLastChangedAt //ins
+lock master
+etag master LocalLastChangedAt
+{
+  create;
+  update;
+  delete;
+
+//  draft action Edit;
+
+  field ( readonly ) LocalLastChangedAt, Status;
+  field ( readonly ) SalesOrderID;
+  field ( mandatory ) Customer;
+
+
+  mapping for zvbak control zsrap_mysalesorder_x
+//  mapping for zvbak corresponding           //ins
+  {
+    SalesOrderID = id;
+    Customer = kunnr;
+    MemoText1 = memo1;
+    MemoText2 = memo2;
+    LocalLastChangedAt = zeitpkt;
+    NetAmount = netwr;
+    Currency = waerk;
+    Status = status;
+  }
+}

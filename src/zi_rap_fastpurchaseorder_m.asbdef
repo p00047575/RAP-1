@@ -1,0 +1,55 @@
+managed implementation in class zbp_i_rap_fastpurchaseorder_m unique;
+strict ( 2 );
+
+define behavior for ZI_RAP_FastPurchaseOrder_M alias PurchaseOrder
+with unmanaged save and cleanup
+lock master unmanaged
+authorization master ( instance )
+etag master LastChangeDateTime
+{
+  create ( precheck );
+  internal update;
+  delete;
+
+  field ( numbering : managed, readonly ) PurchaseOrderUuid;
+
+  field ( readonly )
+  PurchaseOrder,
+  PurchaseOrderItem,
+  PurchaseOrderType,
+  CompanyCode,
+  PurchasingOrganization,
+  PurchasingGroup,
+  Supplier,
+  PurchaseOrderQuantityUnit,
+  Plant,
+  LastChangeDateTime,
+  CreatedBy,
+  CreatedAt,
+  LastChangedBy,
+  LastChangedAt;
+
+  field ( mandatory ) Material, OrderQuantity;
+
+  determination initOrgData on modify { create; }
+  determination initMaterialRelatedData on modify { create; }
+
+  determination createPurchaseOrder on save { create; }
+  determination deletePurchaseOrder on save { delete; }
+
+  validation validateMandatoryFields on save { create; }
+  validation validateMaterial on save { create; }
+  validation validateForCreate on save { create; }
+  validation validateForDelete on save { delete; }
+
+  mapping for zrap_a_fast_po corresponding
+    {
+      PurchaseOrderUuid = purchase_order_uuid;
+      PurchaseOrder     = purchase_order;
+      PurchaseOrderItem = purchase_order_item;
+      CreatedBy         = created_by;
+      CreatedAt         = created_at;
+      LastChangedBy     = last_changed_by;
+      LastChangedAt     = last_changed_at;
+    }
+}

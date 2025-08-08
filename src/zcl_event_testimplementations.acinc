@@ -1,0 +1,54 @@
+*"* use this source file for the definition and implementation of
+*"* local helper classes, interface definitions and type
+*"* declarations
+CLASS lcl_local_event_consumption DEFINITION INHERITING FROM cl_abap_behavior_event_handler.
+  PRIVATE SECTION.
+    METHODS Salesorder_Changed FOR ENTITY EVENT changed_salesOrders FOR SalesOrder~Changed.
+    METHODS Salesorder_ZZChanged FOR ENTITY EVENT changed_salesOrders FOR SalesOrder~zz_changed.
+ENDCLASS.
+
+CLASS lcl_local_event_consumption IMPLEMENTATION.
+  METHOD Salesorder_Changed.
+
+    LOOP AT changed_salesOrders INTO DATA(ls_changed_salesOrder).
+
+      MODIFY ENTITIES OF i_salesordertp IN LOCAL MODE
+             ENTITY SalesOrderText
+             UPDATE
+             FIELDS ( LongText )
+             WITH VALUE #( (
+                             %key-salesorder   = ls_changed_salesOrder-SalesOrder
+                             %key-Language     = 'D'
+                             %key-LongTextID   = 'TX01'
+                             longtext          = 'Text updated by Event'
+                             ) )
+      FAILED   DATA(ls_failed)
+      REPORTED DATA(ls_reported).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+  METHOD salesorder_zzChanged.
+
+    LOOP AT Changed_salesOrders INTO DATA(ls_Changed_salesOrder).
+
+      data(lv_longtext) = |Text updated by Event - Extension by User: | && ls_changed_salesorder-%param-CreatedByUser.
+
+      MODIFY ENTITIES OF i_salesordertp IN LOCAL MODE
+             ENTITY SalesOrderText
+             UPDATE
+             FIELDS ( LongText )
+             WITH VALUE #( (
+                             %key-salesorder   = ls_Changed_salesOrder-SalesOrder
+                             %key-Language     = 'D'
+                             %key-LongTextID   = 'TX02'
+                             longtext          = lv_longtext
+                             ) )
+      FAILED   DATA(ls_failed)
+      REPORTED DATA(ls_reported).
+
+    ENDLOOP.
+  ENDMETHOD.
+
+ENDCLASS.

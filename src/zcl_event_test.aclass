@@ -1,0 +1,15 @@
+CLASS zcl_event_test DEFINITION
+                        PUBLIC
+                        ABSTRACT
+                        FINAL
+                        FOR EVENTS OF i_salesordertp.
+
+  PUBLIC SECTION.
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCL_EVENT_TEST IMPLEMENTATION.
+ENDCLASS.
