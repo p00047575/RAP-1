@@ -1,0 +1,7 @@
+@Metadata.layer: #CORE
+@EndUserText.label: 'Flugdetails aktueller Flüge'
+annotate entity ZI_FlightDetail with
+{
+  @EndUserText.label: 'Flug ausgebucht'
+  FlightOccupied;
+}
